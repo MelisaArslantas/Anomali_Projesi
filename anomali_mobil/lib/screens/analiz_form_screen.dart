@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../widgets/jitt_popup.dart';
-import 'gecmis_screen.dart'; // 👈 Geçmiş ekranını import ettik
+import 'gecmis_screen.dart';
 
 class AnalizFormScreen extends StatefulWidget {
   const AnalizFormScreen({super.key});
@@ -27,24 +27,41 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
   String secilenGelirGrubu = "Orta";
   final List<String> gelirGruplari = ["Düşük", "Orta", "Yüksek", "Çok Yüksek"];
 
-  // 🎨 Risk Seviyesine Göre Renk Döndüren Fonksiyon
-  Color getRiskColor(String risk) {
-    if (risk == "Yüksek") return Colors.red;
-    if (risk == "Orta") return Colors.orange;
+  // 🎨 Risk Seviyesine Göre Renk Döndüren Akıllı Fonksiyon
+  Color getRiskColor(Map<String, dynamic> data) {
+    // Backend'den gelen tüm olası etiketleri kontrol et
+    String seviye = (data['risk_seviyesi'] ?? data['risk'] ?? "").toString().toLowerCase();
+    String tahmin = (data["tahmin"] ?? "").toString().toLowerCase();
+    double skor = (data["risk_skoru"] ?? 0.0).toDouble();
+
+    // 1. Önce "Anomali" veya "Kritik" durumuna bak (En öncelikli)
+    if (tahmin.contains("anomali") || seviye.contains("kritik")) {
+      return Colors.red;
+    }
+
+    // 2. Metin bazlı kontrol (Yüksek, Orta, Düşük)
+    if (seviye.contains("yüksek")) return Colors.red;
+    if (seviye.contains("orta")) return Colors.orange;
+    if (seviye.contains("düşük")) return Colors.green;
+
+    // 3. Fallback: Eğer metin bulunamazsa skora göre belirle
+    if (skor >= 75) return Colors.red;
+    if (skor >= 40) return Colors.orange;
     return Colors.green;
   }
 
   Future<void> analizYap() async {
     if (!_formKey.currentState!.validate()) return;
-    
+    if (yukleniyor) return; 
+
     setState(() => yukleniyor = true);
 
     try {
       final data = await ApiService().predictRisk(
-        userId: int.parse(_userIdController.text),
-        age: int.parse(_ageController.text),
-        income: double.parse(_incomeController.text),
-        amount: double.parse(_amountController.text),
+        userId: int.tryParse(_userIdController.text) ?? 1,
+        age: int.tryParse(_ageController.text) ?? 0,
+        income: double.tryParse(_incomeController.text) ?? 0.0,
+        amount: double.tryParse(_amountController.text) ?? 0.0,
         category: secilenKategori,
         incomeGroup: secilenGelirGrubu,
       );
@@ -52,16 +69,20 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
       setState(() {
         sonuc = data;
         yukleniyor = false;
+        // Debug için terminale yazdıralım (Hata olursa buradan görürüz)
+        print("API YANITI: $data");
       });
 
-      // 🔥 Anomali Durumunda Popup Göster
       if (data["tahmin"] == "Anomali") {
         showAnimatedAnomalyPopup(context, data);
       }
     } catch (e) {
       setState(() => yukleniyor = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata oluştu: $e")),
+        const SnackBar(
+          content: Text("⚠️ Sunucu bağlantı hatası!"),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     }
   }
@@ -74,16 +95,9 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
         backgroundColor: Colors.indigo, 
         foregroundColor: Colors.white,
         actions: [
-          // 🕒 Sağ Üst Köşeye Geçmiş Butonu
           IconButton(
             icon: const Icon(Icons.history_rounded),
-            tooltip: "İşlem Geçmişi",
-            onPressed: () {
-              Navigator.push(
-                context, 
-                MaterialPageRoute(builder: (context) => const GecmisScreen())
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GecmisScreen())),
           ),
         ],
       ),
@@ -93,9 +107,7 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // 📊 Analiz Sonucu Varsa En Üstte Görsel Kart Olarak Göster
               if (sonuc != null) _buildResultCard(sonuc!),
-              
               const SizedBox(height: 20),
               _buildField(_userIdController, "Kullanıcı ID", Icons.person),
               _buildField(_ageController, "Yaş", Icons.cake),
@@ -108,7 +120,7 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
               const SizedBox(height: 30),
               
               yukleniyor 
-                ? const CircularProgressIndicator() 
+                ? const CircularProgressIndicator(color: Colors.indigo) 
                 : ElevatedButton(
                     onPressed: analizYap,
                     style: ElevatedButton.styleFrom(
@@ -126,57 +138,58 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
     );
   }
 
-  // 💎 Gelişmiş Sonuç Kartı (Risk Bar İçerir)
   Widget _buildResultCard(Map<String, dynamic> data) {
-    final String risk = data['risk'] ?? "Düşük";
+    // 🔥 ÖNEMLİ: Etiketi doğru anahtardan çekiyoruz
+    final String riskEtiketi = data['risk_seviyesi'] ?? data['risk'] ?? "Normal";
     final double skor = (data['risk_skoru'] ?? 0.0).toDouble();
-    final Color anaRenk = getRiskColor(risk);
+    final Color anaRenk = getRiskColor(data); 
 
     return Card(
-      elevation: 5,
+      elevation: 8,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            Text("ANALİZ RAPORU", style: TextStyle(color: Colors.grey[600], letterSpacing: 1.2, fontWeight: FontWeight.bold)),
+            Text("ANALİZ RAPORU", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             const SizedBox(height: 10),
             Text(
-              risk.toUpperCase(),
+              riskEtiketi.toUpperCase(),
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: anaRenk),
             ),
             const SizedBox(height: 15),
             
-            // 📈 Risk Bar (Progress Bar)
+            // Risk Çubuğu
             Stack(
               alignment: Alignment.center,
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(10),
                   child: LinearProgressIndicator(
                     value: skor / 100,
-                    minHeight: 20,
+                    minHeight: 22,
                     backgroundColor: Colors.grey[200],
                     valueColor: AlwaysStoppedAnimation<Color>(anaRenk),
                   ),
                 ),
-                Text("%$skor", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                Text("%${skor.toStringAsFixed(1)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 15),
             
-            // 📝 Sistem Açıklama Kutusu
+            // Açıklama Notu
             Container(
-              padding: const EdgeInsets.all(12),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
               decoration: BoxDecoration(
-                color: anaRenk.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: anaRenk.withOpacity(0.3)),
+                color: anaRenk.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: anaRenk.withOpacity(0.2)),
               ),
               child: Text(
-                data['aciklama'] ?? "İşlem başarıyla analiz edildi.",
+                data['analiz_notu'] ?? data['aciklama'] ?? "İşlem başarıyla analiz edildi.",
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w500),
+                style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, fontWeight: FontWeight.w500),
               ),
             ),
           ],
@@ -187,14 +200,16 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
 
   Widget _buildField(TextEditingController ctr, String label, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.only(bottom: 12),
       child: TextFormField(
         controller: ctr, 
         keyboardType: TextInputType.number, 
         decoration: InputDecoration(
           labelText: label, 
           prefixIcon: Icon(icon), 
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.indigo)),
+          filled: true,
+          fillColor: Colors.grey[50],
         )
       ),
     );
@@ -205,7 +220,9 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
       value: value, 
       decoration: InputDecoration(
         labelText: label, 
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        filled: true,
+        fillColor: Colors.grey[50],
       ), 
       items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(), 
       onChanged: onChanged

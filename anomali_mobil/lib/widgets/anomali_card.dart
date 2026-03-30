@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
-import 'risk_bar.dart'; // RiskBar'ın aynı klasörde olduğunu varsayıyorum
+import 'risk_bar.dart';
 
 Widget buildResultCard(Map<String, dynamic> data) {
-  // 1. Tahmine göre ana renkleri belirleyelim
-  // API'den "tahmin" anahtarı ile "Anomali" gelip gelmediğini kontrol ediyoruz
-  final bool isAnomaly = data["tahmin"] == "Anomali";
+  // 1. Tahmine göre ana renkleri belirleyelim (GÜNCELLENDİ)
+  // API'den gelen metni küçük harfe çevirerek kontrol ediyoruz ki harf hatası olmasın
+  final String tahmin = (data["tahmin"] ?? "").toString().toLowerCase();
+  final bool isAnomaly = tahmin.contains("anomali") || tahmin.contains("kritik");
   
-  // Risk skoruna göre daha hassas renk kontrolü (Görsel uyum için)
   final double riskSkoru = (data["risk_skoru"] ?? 0.0).toDouble();
   
   Color mainColor;
   Color cardBgColor;
 
+  // ÖNCELİK: Eğer anomali/kritik tespiti varsa skor ne olursa olsun KIRMIZI
   if (isAnomaly || riskSkoru >= 70) {
     mainColor = Colors.red;
     cardBgColor = Colors.red.shade50;
@@ -56,7 +57,7 @@ Widget buildResultCard(Map<String, dynamic> data) {
           ),
           const Divider(height: 30),
           
-          // 2. Risk Bar (Senin widget'ın)
+          // 2. Risk Bar
           RiskBar(skor: riskSkoru),
           
           const SizedBox(height: 20),
@@ -70,7 +71,7 @@ Widget buildResultCard(Map<String, dynamic> data) {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              data["analiz_notu"] ?? (isAnomaly ? "Şüpheli işlem saptandı." : "İşlem normal davranış aralığında."),
+              data["analiz_notu"] ?? data["aciklama"] ?? (isAnomaly ? "Şüpheli işlem saptandı." : "İşlem normal davranış aralığında."),
               style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
             ),
           ),
