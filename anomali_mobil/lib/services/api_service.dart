@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import '../models/analiz_modeli.dart'; // Model dosyanı import ettiğinden emin ol
 
 class ApiService {
-  // Emülatör kullandığın için 10.0.2.2 adresi doğrudur.
+  // Emülatör için 10.0.2.2, fiziksel cihaz için bilgisayarın yerel IP'si
   static const String _baseUrl = "http://10.0.2.2:8000";
 
+  // 🧪 TAHMİN: Yeni harcama analizi gönder
   Future<Map<String, dynamic>> predictRisk({
     required int userId,
     required int age,
@@ -16,8 +18,6 @@ class ApiService {
   }) async {
     final url = Uri.parse("$_baseUrl/predict");
 
-    // 🔥 KRİTİK: Değişken isimlerini Python (main.py) ile birebir eşitledik.
-    // Python tarafı bu anahtarları (key) bekliyor.
     final requestData = {
       "kullanici_id": userId,
       "harcama_tutari": amount,
@@ -25,7 +25,6 @@ class ApiService {
       "yas": age,
       "aylik_gelir": income,
       "gelir_grubu": incomeGroup,
-      "amount": amount, // Yedek olarak tutuyoruz
     };
 
     try {
@@ -38,37 +37,43 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       } else {
-        return {"error": "Sunucu hatası: ${response.statusCode}"};
+        return {"error": "Sunucu hatası: ${response.statusCode}", "success": false};
       }
     } on SocketException {
-      return {"error": "Sunucuya ulaşılamıyor. Lütfen backend'in çalıştığından emin olun."};
+      return {"error": "Sunucuya ulaşılamıyor. Lütfen backend'in açık olduğunu kontrol edin.", "success": false};
     } catch (e) {
-      return {"error": "Beklenmedik bir hata oluştu: $e"};
+      return {"error": "Hata: $e", "success": false};
     }
   }
-  Future<bool> clearHistory() async {
-  final url = Uri.parse("$_baseUrl/clear-history");
-  try {
-    final response = await http.delete(url).timeout(const Duration(seconds: 10));
-    return response.statusCode == 200;
-  } catch (e) {
-    return false;
-  }
-}
 
-  Future<List<dynamic>> getHistory() async {
+  // 📜 LİSTELEME: Geçmiş verileri çek ve Model'e dönüştür
+  Future<List<AnalizModeli>> getHistory() async {
     final url = Uri.parse("$_baseUrl/history");
 
     try {
       final response = await http.get(url).timeout(const Duration(seconds: 10));
+
       if (response.statusCode == 200) {
-        // Backend artık listeyi direkt döndürüyor.
-        return jsonDecode(response.body);
+        final List<dynamic> rawData = jsonDecode(response.body);
+        // JSON listesini AnalizModeli listesine çeviriyoruz (Mapping)
+        return rawData.map((json) => AnalizModeli.fromJson(json)).toList();
       }
       return [];
     } catch (e) {
       print("Geçmiş çekme hatası: $e");
       return [];
+    }
+  }
+
+  // 🗑️ TEMİZLEME: Tüm geçmişi sil
+  Future<bool> clearHistory() async {
+    final url = Uri.parse("$_baseUrl/clear-history");
+    try {
+      final response = await http.delete(url).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200;
+    } catch (e) {
+      print("Geçmiş silme hatası: $e");
+      return false;
     }
   }
 }
