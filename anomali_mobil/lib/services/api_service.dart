@@ -47,23 +47,22 @@ class ApiService {
   }
 
   // 📜 LİSTELEME: Geçmiş verileri çek ve Model'e dönüştür
-  Future<List<AnalizModeli>> getHistory() async {
-    final url = Uri.parse("$_baseUrl/history");
-
-    try {
-      final response = await http.get(url).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final List<dynamic> rawData = jsonDecode(response.body);
-        // JSON listesini AnalizModeli listesine çeviriyoruz (Mapping)
-        return rawData.map((json) => AnalizModeli.fromJson(json)).toList();
-      }
-      return [];
-    } catch (e) {
-      print("Geçmiş çekme hatası: $e");
-      return [];
+  // 📜 LİSTELEME: Geçmiş verileri çek ve Model'e dönüştür
+ Future<List<AnalizModeli>> getHistory() async {
+  final url = Uri.parse("$_baseUrl/history");
+  try {
+    final response = await http.get(url).timeout(const Duration(seconds: 10));
+    if (response.statusCode == 200) {
+      final List<dynamic> rawData = jsonDecode(response.body);
+      // ⚡ BURAYI GÜNCELLE: Listeyi AnalizModeli tipinde oluşturmaya zorla
+      return List<AnalizModeli>.from(rawData.map((x) => AnalizModeli.fromJson(x)));
     }
+    return [];
+  } catch (e) {
+    print("Hata: $e");
+    return [];
   }
+}
 
   // 🗑️ TEMİZLEME: Tüm geçmişi sil
   Future<bool> clearHistory() async {

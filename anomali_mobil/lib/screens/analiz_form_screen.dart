@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
 import '../../widgets/jitt_popup.dart';
+import '../../widgets/anomali_card.dart'; // 🆕 Yeni kart widget'ımızı ekledik
 import 'gecmis_screen.dart';
 
 class AnalizFormScreen extends StatefulWidget {
@@ -17,71 +18,50 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
 
   // Form Kontrolcüleri
   final TextEditingController _userIdController = TextEditingController(text: "1");
-  final TextEditingController _ageController = TextEditingController(text: "23");
-  final TextEditingController _incomeController = TextEditingController(text: "50000");
   final TextEditingController _amountController = TextEditingController(text: "100");
 
   String secilenKategori = "Fatura";
   final List<String> kategoriler = ["Fatura", "Gıda", "Eğlence", "Diğer", "Elektronik", "Giyim", "Market", "Restoran", "Seyahat"];
 
-  String secilenGelirGrubu = "Orta";
-  final List<String> gelirGruplari = ["Düşük", "Orta", "Yüksek", "Çok Yüksek"];
-
-  // 🎨 Risk Seviyesine Göre Renk Döndüren Akıllı Fonksiyon
-  Color getRiskColor(Map<String, dynamic> data) {
-    // Backend'den gelen tüm olası etiketleri kontrol et
-    String seviye = (data['risk_seviyesi'] ?? data['risk'] ?? "").toString().toLowerCase();
-    String tahmin = (data["tahmin"] ?? "").toString().toLowerCase();
-    double skor = (data["risk_skoru"] ?? 0.0).toDouble();
-
-    // 1. Önce "Anomali" veya "Kritik" durumuna bak (En öncelikli)
-    if (tahmin.contains("anomali") || seviye.contains("kritik")) {
-      return Colors.red;
-    }
-
-    // 2. Metin bazlı kontrol (Yüksek, Orta, Düşük)
-    if (seviye.contains("yüksek")) return Colors.red;
-    if (seviye.contains("orta")) return Colors.orange;
-    if (seviye.contains("düşük")) return Colors.green;
-
-    // 3. Fallback: Eğer metin bulunamazsa skora göre belirle
-    if (skor >= 75) return Colors.red;
-    if (skor >= 40) return Colors.orange;
-    return Colors.green;
-  }
-
+  // 🚀 ANALİZ YAPMA FONKSİYONU
   Future<void> analizYap() async {
     if (!_formKey.currentState!.validate()) return;
     if (yukleniyor) return; 
 
-    setState(() => yukleniyor = true);
+    setState(() {
+      yukleniyor = true;
+      sonuc = null; // Yeni analiz başlarken eski sonucu temizle
+    });
 
     try {
       final data = await ApiService().predictRisk(
         userId: int.tryParse(_userIdController.text) ?? 1,
-        age: int.tryParse(_ageController.text) ?? 0,
-        income: double.tryParse(_incomeController.text) ?? 0.0,
+        age: 23, // Backend'de kullanılmadığı için sabit verdik
+        income: 50000.0,
         amount: double.tryParse(_amountController.text) ?? 0.0,
         category: secilenKategori,
-        incomeGroup: secilenGelirGrubu,
+        incomeGroup: "Orta",
       );
 
       setState(() {
         sonuc = data;
         yukleniyor = false;
-        // Debug için terminale yazdıralım (Hata olursa buradan görürüz)
-        print("API YANITI: $data");
       });
 
+      // Eğer anomali tespiti varsa popup göster
       if (data["tahmin"] == "Anomali") {
         showAnimatedAnomalyPopup(context, data);
       }
     } catch (e) {
       setState(() => yukleniyor = false);
+      
+      // ⚠️ Gelişmiş Hata Mesajı Gösterimi
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("⚠️ Sunucu bağlantı hatası!"),
+        SnackBar(
+          content: Text("⚠️ Sunucu Hatası: ${e.toString()}"), // Hatayı tam metin olarak gösterir
           backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -107,29 +87,38 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
           key: _formKey,
           child: Column(
             children: [
-              if (sonuc != null) _buildResultCard(sonuc!),
-              const SizedBox(height: 20),
-              _buildField(_userIdController, "Kullanıcı ID", Icons.person),
-              _buildField(_ageController, "Yaş", Icons.cake),
-              _buildField(_incomeController, "Aylık Gelir", Icons.payments),
-              _buildField(_amountController, "Harcama Tutarı", Icons.shopping_bag),
+              // 🎨 Güzelleştirilmiş Sonuç Kartı
+              if (sonuc != null) buildResultCard(sonuc!),
+              
+              const SizedBox(height: 10),
+              
+              _buildField(_userIdController, "Kullanıcı ID", Icons.person_outline),
+              _buildField(_amountController, "Harcama Tutarı (TL)", Icons.monetization_on_outlined),
+              
               const SizedBox(height: 15),
-              _buildDropdown("Kategori", kategoriler, secilenKategori, (v) => setState(() => secilenKategori = v!)),
-              const SizedBox(height: 15),
-              _buildDropdown("Gelir Grubu", gelirGruplari, secilenGelirGrubu, (v) => setState(() => secilenGelirGrubu = v!)),
+              _buildDropdown("Kategori Seçimi", kategoriler, secilenKategori, (v) => setState(() => secilenKategori = v!)),
+              
               const SizedBox(height: 30),
               
+              // 🔄 Loading Spinner veya Buton Kontrolü
               yukleniyor 
-                ? const CircularProgressIndicator(color: Colors.indigo) 
-                : ElevatedButton(
+                ? const Column(
+                    children: [
+                      CircularProgressIndicator(color: Colors.indigo),
+                      SizedBox(height: 10),
+                      Text("Yapay Zeka Analiz Ediyor...", style: TextStyle(color: Colors.indigo, fontWeight: FontWeight.w500)),
+                    ],
+                  ) 
+                : ElevatedButton.icon(
                     onPressed: analizYap,
+                    icon: const Icon(Icons.analytics_outlined),
+                    label: const Text("ANALİZ ET", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 55), 
+                      minimumSize: const Size(double.infinity, 60), 
                       backgroundColor: Colors.indigo, 
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
                     ),
-                    child: const Text("ANALİZ ET", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
             ],
           ),
@@ -138,79 +127,21 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
     );
   }
 
-  Widget _buildResultCard(Map<String, dynamic> data) {
-    // 🔥 ÖNEMLİ: Etiketi doğru anahtardan çekiyoruz
-    final String riskEtiketi = data['risk_seviyesi'] ?? data['risk'] ?? "Normal";
-    final double skor = (data['risk_skoru'] ?? 0.0).toDouble();
-    final Color anaRenk = getRiskColor(data); 
-
-    return Card(
-      elevation: 8,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Text("ANALİZ RAPORU", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-            const SizedBox(height: 10),
-            Text(
-              riskEtiketi.toUpperCase(),
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: anaRenk),
-            ),
-            const SizedBox(height: 15),
-            
-            // Risk Çubuğu
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: skor / 100,
-                    minHeight: 22,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: AlwaysStoppedAnimation<Color>(anaRenk),
-                  ),
-                ),
-                Text("%${skor.toStringAsFixed(1)}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)),
-              ],
-            ),
-            const SizedBox(height: 15),
-            
-            // Açıklama Notu
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-              decoration: BoxDecoration(
-                color: anaRenk.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: anaRenk.withOpacity(0.2)),
-              ),
-              child: Text(
-                data['analiz_notu'] ?? data['aciklama'] ?? "İşlem başarıyla analiz edildi.",
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildField(TextEditingController ctr, String label, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 15),
       child: TextFormField(
         controller: ctr, 
         keyboardType: TextInputType.number, 
         decoration: InputDecoration(
           labelText: label, 
-          prefixIcon: Icon(icon), 
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.indigo)),
+          prefixIcon: Icon(icon, color: Colors.indigo), 
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.indigo, width: 2)),
           filled: true,
           fillColor: Colors.grey[50],
-        )
+        ),
+        validator: (value) => (value == null || value.isEmpty) ? "Bu alan boş bırakılamaz" : null,
       ),
     );
   }
@@ -220,7 +151,8 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
       value: value, 
       decoration: InputDecoration(
         labelText: label, 
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon: const Icon(Icons.category_outlined, color: Colors.indigo),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
         filled: true,
         fillColor: Colors.grey[50],
       ), 
