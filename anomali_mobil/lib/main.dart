@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/analiz_form_screen.dart';
+import 'screens/login_screen.dart'; // HATA BURADAYDI: Bu satırı ekleyerek LoginScreen'i tanıttık.
 
 void main() {
   runApp(const AnomaliApp());
@@ -13,8 +13,11 @@ class AnomaliApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: "Anomali Tespit",
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo), useMaterial3: true),
-      home: const AnalizFormScreen(), // Yeni oluşturduğumuz ekrana yönlendiriyoruz
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo), 
+        useMaterial3: true,
+      ),
+      home: const LoginScreen(), // Artık sınıf tanınıyor
     );
   }
-}
+} // HATA BURADAYDI: Dosyanın bu parantezle bittiğinden emin ol.
