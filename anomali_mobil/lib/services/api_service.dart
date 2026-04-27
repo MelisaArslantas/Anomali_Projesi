@@ -1,13 +1,34 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import '../models/analiz_modeli.dart'; // Model dosyanı import ettiğinden emin ol
+import '../models/analiz_modeli.dart';
 
 class ApiService {
-  // Emülatör için 10.0.2.2, fiziksel cihaz için bilgisayarın yerel IP'si
   static const String _baseUrl = "http://10.0.2.2:8000";
 
-  // 🧪 TAHMİN: Yeni harcama analizi gönder
+  // ✅ BU METOT EKSİK OLDUĞU İÇİN HATA ALIYORSUN
+  Future<bool> register(String email, String password, double income, String expenseType) async {
+    final url = Uri.parse('$_baseUrl/register');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+          'income': income,
+          'expense_type': expenseType,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      print("Kayıt hatası: $e");
+      return false;
+    }
+  }
+
+  // Tahmin metodu
   Future<Map<String, dynamic>> predictRisk({
     required int userId,
     required int age,
@@ -17,7 +38,6 @@ class ApiService {
     required String incomeGroup,
   }) async {
     final url = Uri.parse("$_baseUrl/predict");
-
     final requestData = {
       "kullanici_id": userId,
       "harcama_tutari": amount,
@@ -26,53 +46,29 @@ class ApiService {
       "aylik_gelir": income,
       "gelir_grubu": incomeGroup,
     };
-
     try {
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(requestData),
       ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        return {"error": "Sunucu hatası: ${response.statusCode}", "success": false};
-      }
-    } on SocketException {
-      return {"error": "Sunucuya ulaşılamıyor. Lütfen backend'in açık olduğunu kontrol edin.", "success": false};
+      return response.statusCode == 200 ? jsonDecode(response.body) : {"success": false};
     } catch (e) {
-      return {"error": "Hata: $e", "success": false};
+      return {"success": false};
     }
   }
 
-  // 📜 LİSTELEME: Geçmiş verileri çek ve Model'e dönüştür
-  // 📜 LİSTELEME: Geçmiş verileri çek ve Model'e dönüştür
- Future<List<AnalizModeli>> getHistory() async {
-  final url = Uri.parse("$_baseUrl/history");
-  try {
-    final response = await http.get(url).timeout(const Duration(seconds: 10));
-    if (response.statusCode == 200) {
-      final List<dynamic> rawData = jsonDecode(response.body);
-      // ⚡ BURAYI GÜNCELLE: Listeyi AnalizModeli tipinde oluşturmaya zorla
-      return List<AnalizModeli>.from(rawData.map((x) => AnalizModeli.fromJson(x)));
-    }
-    return [];
-  } catch (e) {
-    print("Hata: $e");
-    return [];
-  }
-}
-
-  // 🗑️ TEMİZLEME: Tüm geçmişi sil
-  Future<bool> clearHistory() async {
-    final url = Uri.parse("$_baseUrl/clear-history");
+  Future<List<AnalizModeli>> getHistory() async {
+    final url = Uri.parse("$_baseUrl/history");
     try {
-      final response = await http.delete(url).timeout(const Duration(seconds: 10));
-      return response.statusCode == 200;
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final List<dynamic> rawData = jsonDecode(response.body);
+        return List<AnalizModeli>.from(rawData.map((x) => AnalizModeli.fromJson(x)));
+      }
+      return [];
     } catch (e) {
-      print("Geçmiş silme hatası: $e");
-      return false;
+      return [];
     }
   }
 }

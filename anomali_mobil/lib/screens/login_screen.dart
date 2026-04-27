@@ -1,4 +1,7 @@
+import 'package:anomali_mobil/screens/register_screen.dart';
 import 'package:flutter/material.dart';
+
+
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -95,7 +98,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text("Hesabınız yok mu? "),
                   GestureDetector(
                     onTap: () {
-                      // Şimdilik boş, Faz 2'de Register Screen'e gidecek
+                      Navigator.push(
+                        context,
+                         MaterialPageRoute(builder: (context) => RegisterScreen()),
+                      );
                     },
                     child: const Text(
                       "Kayıt Ol",
