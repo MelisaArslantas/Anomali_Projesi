@@ -1,4 +1,5 @@
 import 'package:anomali_mobil/screens/register_screen.dart';
+import 'package:anomali_mobil/screens/dashboard_screen.dart';
 import 'package:flutter/material.dart';
 
 
@@ -77,8 +78,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () {
-                    // Şimdilik boş, Faz 2'de yönlendirme eklenecek
-                  },
+                    Navigator.pushReplacement(
+                      context,
+                     MaterialPageRoute(
+                     builder: (context) => DashboardScreen(userEmail: _emailController.text),
+                     ),
+    );
+  },
+                  
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.indigo,
                     foregroundColor: Colors.white,
