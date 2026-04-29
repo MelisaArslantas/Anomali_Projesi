@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 import 'analiz_form_screen.dart';
 import 'gecmis_screen.dart';
 import 'profil.dart';
+import 'jitt.dart';
 
-
-class DashboardScreen extends StatelessWidget {
-  final String userEmail; // Login'den gelen maili göstermek için
+class DashboardScreen extends StatefulWidget { // StatefulWidget'a çevirdik
+  final String userEmail;
 
   const DashboardScreen({super.key, required this.userEmail});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  // Rozetin görünüp görünmeyeceğini kontrol eden değişken
+  bool hasNotification = true; 
 
   @override
   Widget build(BuildContext context) {
@@ -17,19 +25,17 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         actions: [
-          // Profil Butonu
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ProfilScreen(userEmail: userEmail),
+                  builder: (context) => ProfilScreen(userEmail: widget.userEmail),
                 ),
               );
             },
           ),
-          // Çıkış Butonu
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => Navigator.pop(context), 
@@ -41,18 +47,17 @@ class DashboardScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Hoşgeldin Bölümü
             Text(
               "Hoşgeldin,",
               style: TextStyle(fontSize: 18, color: Colors.grey[700]),
             ),
             Text(
-              userEmail,
+              widget.userEmail,
               style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.indigo),
             ),
             const SizedBox(height: 30),
 
-            // Özet Kartları (Grid şeklinde)
+            // Özet Kartları
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -66,9 +71,58 @@ class DashboardScreen extends StatelessWidget {
                 _buildSummaryCard("Durum", "Güvenli", Icons.check_circle_outline, Colors.teal),
               ],
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 35),
 
-            // Aksiyon Butonları
+            const Text(
+              "Gelişim Fırsatları",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 15),
+            
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                _buildActionButton(
+                  context, 
+                  "Finansal Gelişim Merkezi (JiTT)", 
+                  Icons.auto_awesome, 
+                  Colors.purple.shade700,
+                  () {
+                    // Sayfaya girerken bildirimi kapatıyoruz
+                    setState(() {
+                      hasNotification = false;
+                    });
+                    Navigator.push(
+                      context, 
+                      MaterialPageRoute(builder: (context) => const JittPage())
+                    );
+                  }
+                ),
+                // hasNotification true ise rozeti göster
+                if (hasNotification)
+                  Positioned(
+                    right: -5,
+                    top: -5,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Text(
+                        "1",
+                        style: TextStyle(
+                          color: Colors.white, 
+                          fontSize: 12, 
+                          fontWeight: FontWeight.bold
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
+            const SizedBox(height: 35),
             const Text(
               "Hızlı İşlemler",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -96,7 +150,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // Özet Kutucukları için Yardımcı Widget
   Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(15),
@@ -119,7 +172,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // Büyük Butonlar için Yardımcı Widget
   Widget _buildActionButton(BuildContext context, String title, IconData icon, Color color, VoidCallback onTap) {
     return SizedBox(
       width: double.infinity,
