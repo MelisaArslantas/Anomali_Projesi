@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "296822368559",
+    "project_id": "finansal-yol-arkadasim",
+    "storage_bucket": "finansal-yol-arkadasim.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:296822368559:android:ec2ca013ae449392ec99da",
+        "android_client_info": {
+          "package_name": "com.example.anomali_mobil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC_hhhsCFmF7bTCgc4rf9JwpWudOI7c-kk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
