@@ -9,7 +9,7 @@ from datetime import datetime
 # ----------------------------------------
 # FastAPI YAPILANDIRMASI
 # ----------------------------------------
-app = FastAPI(title="Anomali Tespit API", version="3.5")
+app = FastAPI(title="Anomali Tespit API", version="4.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,7 +37,7 @@ if not os.path.exists(DATASET_DIR):
 try:
     model = joblib.load(MODEL_PATH)
     feature_columns = joblib.load(FEATURES_PATH)
-    print(f"✅ Model yüklendi. Özellikler: {feature_columns}")
+    print(f"✅ Model ve Özellikler Yüklendi: {len(feature_columns)} sütun")
 except Exception as e:
     print(f"❌ Model yükleme hatası: {e}")
     model = None
@@ -60,7 +60,6 @@ def save_to_csv(row_data: dict):
             df_new.to_csv(LOG_PATH, index=False, encoding="utf-8-sig")
         else:
             df_new.to_csv(LOG_PATH, mode='a', index=False, header=False, encoding="utf-8-sig")
-        print(f"💾 İşlem kaydedildi: {row_data['harcama_tutari']} TL")
     except Exception as e:
         print(f"⚠️ Kayıt Hatası: {e}")
 
@@ -69,7 +68,7 @@ def save_to_csv(row_data: dict):
 # ----------------------------------------
 @app.get("/")
 def home():
-    return {"status": "active", "file": LOG_PATH}
+    return {"status": "active", "model_loaded": model is not None}
 
 @app.post("/predict")
 async def predict(data: dict = Body(...)):
@@ -77,26 +76,31 @@ async def predict(data: dict = Body(...)):
         raise HTTPException(status_code=500, detail="Model yüklü değil.")
     
     try:
-        raw_amount = data.get("harcama_tutari") or data.get("amount") or 0
-        tutar = float(raw_amount)
-        kategori = str(data.get("kategori") or data.get("category") or "Diğer")
-        u_id = int(data.get("kullanici_id") or data.get("userId") or 1)
-
+        # 1. Verileri Flutter'dan Alıyoruz
+        tutar = float(data.get("amount") or data.get("harcama_tutari") or 0.0)
+        kategori = str(data.get("category") or data.get("kategori") or "Diğer")
+        u_id = int(data.get("userId") or data.get("kullanici_id") or 1)
+        
         now = datetime.now()
+        
+        # 2. Model Özelliklerini Hazırlıyoruz
         input_row = {col: 0.0 for col in feature_columns}
         input_row['Amount'] = tutar
         input_row['Hour'] = float(now.hour)
         input_row['Is_Night'] = 1.0 if now.hour <= 6 else 0.0
         input_row['Log_Amount'] = np.log1p(tutar)
 
+        # 3. Kategori Sütununu Eşleştiriyoruz (Örn: Cat_Dışarıda Yemek)
         cat_key = f"Cat_{kategori}"
         if cat_key in input_row:
             input_row[cat_key] = 1.0
         
+        # 4. Tahmin Yapıyoruz
         input_df = pd.DataFrame([input_row])[feature_columns]
-
         prediction = model.predict(input_df)[0]
         decision_val = model.decision_function(input_df)[0]
+        
+        # Risk Skoru Hesaplama (0-100 arası)
         risk_score = round(float(np.clip((0.5 - decision_val) * 100, 0, 100)), 1)
         
         is_anomaly = (prediction == -1)
@@ -115,38 +119,25 @@ async def predict(data: dict = Body(...)):
         
         save_to_csv(res_data)
 
+        # 5. JiTT Popup İçin Yanıt Gönderiyoruz
         return {
             **res_data,
-            "aciklama": "Şüpheli işlem saptandı!" if is_anomaly else "İşlem normal.",
-            "analiz_notu": "Kritik anomali!" if is_anomaly else "Düzenli işlem."
+            "aciklama": "Şüpheli harcama! Profil limitlerinizi aşıyor." if is_anomaly else "İşlem normal.",
+            "analiz_notu": "Gelişim Merkezini (JiTT) kontrol edin." if is_anomaly else "Düzenli harcama."
         }
+
     except Exception as e:
-        print(f"🔥 Hata: {e}")
+        print(f"🔥 Predict Hatası: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/history")
 def get_history():
     try:
-        if not os.path.exists(LOG_PATH):
-            return []
+        if not os.path.exists(LOG_PATH): return []
         df = pd.read_csv(LOG_PATH, encoding="utf-8-sig")
-        records = df.replace({np.nan: None}).to_dict(orient="records")
-        return records[::-1]
+        return df.replace({np.nan: None}).to_dict(orient="records")[::-1]
     except Exception as e:
-        print(f"⚠️ History Error: {e}")
         return []
-
-@app.delete("/clear-history")
-def clear_history():
-    try:
-        if os.path.exists(LOG_PATH):
-            os.remove(LOG_PATH)
-            print("🗑️ Geçmiş dosyası silindi.")
-            return {"status": "success", "message": "Geçmiş başarıyla silindi."}
-        return {"status": "info", "message": "Silinecek geçmiş bulunamadı."}
-    except Exception as e:
-        print(f"🔥 Silme Hatası: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 # ----------------------------------------
 # ÇALIŞTIRMA
