@@ -21,7 +21,7 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
   // Form Kontrolcüleri
   final TextEditingController _amountController = TextEditingController();
 
-  // ✅ GERÇEKÇİ KATEGORİLER (Backend ile birebir aynı)
+  // ✅ GERÇEKÇİ KATEGORİLER (Backend/IP3 Modeli ile tam uyumlu)
   String secilenKategori = "Gıda & Market";
   final List<String> kategoriler = [
     'Gıda & Market',
@@ -48,17 +48,18 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
     });
 
     try {
-      // 1️⃣ Firestore'dan kullanıcı verilerini çekiyoruz
+      // 1️⃣ Firestore'dan güncel kullanıcı verilerini çekiyoruz
       final userData = await _authService.getUserData();
       if (userData == null || !userData.exists) throw "Kullanıcı verisi bulunamadı";
 
       double userIncome = (userData['monthly_income'] as num).toDouble();
       String userIncomeGroup = userData['income_group'];
+      String realUid = userData['uid']; // ✅ Gerçek Firebase UID bilgisi
 
-      // 2️⃣ Backend'e verileri gönderiyoruz
+      // 2️⃣ Backend'e gerçek verileri gönderiyoruz
       final data = await ApiService().predictRisk(
-        userId: 1, 
-        age: 23,
+        userId: realUid, // ✅ Sabit '1' yerine gerçek UID gönderiliyor
+        age: 23, 
         income: userIncome, 
         amount: double.tryParse(_amountController.text) ?? 0.0,
         category: secilenKategori,
@@ -70,7 +71,7 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
         yukleniyor = false;
       });
 
-      // 3️⃣ Anomali varsa Popup göster (JiTT)
+      // 3️⃣ Anomali varsa JiTT Popup göster
       if (data["tahmin"] == "Anomali") {
         showAnimatedAnomalyPopup(context, data);
       }
@@ -92,7 +93,10 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.history_rounded),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GecmisScreen())),
+            onPressed: () => Navigator.push(
+              context, 
+              MaterialPageRoute(builder: (context) => const GecmisScreen())
+            ),
           ),
         ],
       ),
@@ -102,15 +106,17 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // 🎨 YENİ: AnomaliCard Widget kullanımı
+              // 🎨 Sonuç Kartı (IP3 Tasarımı)
               if (sonuc != null) AnomaliCard(data: sonuc!),
               
               const SizedBox(height: 10),
               
+              // Tutar Girişi
               _buildField(_amountController, "Harcama Tutarı (TL)", Icons.monetization_on_outlined),
               
               const SizedBox(height: 15),
               
+              // Kategori Seçimi
               _buildDropdown("Harcama Kategorisi", kategoriler, secilenKategori, 
                 (v) => setState(() => secilenKategori = v!)),
               

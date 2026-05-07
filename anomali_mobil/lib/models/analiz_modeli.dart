@@ -1,46 +1,32 @@
 class AnalizModeli {
-  final String tahmin;
+  final String tarih;
+  final String kullaniciId;
+  final String kategori;
+  final double harcamaTutari; // ✅ İsmi tam olarak bu yaptık
   final String riskSeviyesi;
   final double riskSkoru;
-  final String aciklama;
-  final String kategori; // 🆕 Filtreleme için eklendi
-  final String tarih;    // 🆕 Sıralama için eklendi
-  final double miktar;   // 🆕 Kart tasarımı için eklendi
+  final String tahmin;
 
   AnalizModeli({
-    required this.tahmin,
+    required this.tarih,
+    required this.kullaniciId,
+    required this.kategori,
+    required this.harcamaTutari,
     required this.riskSeviyesi,
     required this.riskSkoru,
-    required this.aciklama,
-    required this.kategori,
-    required this.tarih,
-    required this.miktar,
+    required this.tahmin,
   });
 
-  // JSON'dan nesneye dönüştürme (Mapping)
+  // JSON'dan modele dönüştürme (Backend'deki isimlerle eşleşmeli)
   factory AnalizModeli.fromJson(Map<String, dynamic> json) {
     return AnalizModeli(
-      tahmin: json['tahmin'] ?? "Normal",
-      riskSeviyesi: json['risk_seviyesi'] ?? "Düşük",
-      // Risk skoru bazen int bazen double gelebilir, güvenli dönüşüm:
-      riskSkoru: double.tryParse(json['risk_skoru'].toString()) ?? 0.0,
-      aciklama: json['analiz_notu'] ?? "İşlem normal görünüyor.",
-      kategori: json['kategori'] ?? "Diğer",
-      tarih: json['tarih'] ?? "",
-      miktar: double.tryParse(json['harcama_tutari'].toString()) ?? 0.0,
+      tarih: json['tarih'] ?? '',
+      kullaniciId: json['kullanici_id']?.toString() ?? '',
+      kategori: json['kategori'] ?? 'Diğer',
+      harcamaTutari: (json['harcama_tutari'] as num?)?.toDouble() ?? 0.0, // ✅ Burası kritik
+      riskSeviyesi: json['risk_seviyesi'] ?? 'Düşük',
+      riskSkoru: (json['risk_skoru'] as num?)?.toDouble() ?? 0.0,
+      tahmin: json['tahmin'] ?? 'Normal',
     );
-  }
-
-  // API'ye veri göndermek gerekirse (opsiyonel)
-  Map<String, dynamic> toJson() {
-    return {
-      'tahmin': tahmin,
-      'risk_seviyesi': riskSeviyesi,
-      'risk_skoru': riskSkoru,
-      'analiz_notu': aciklama,
-      'kategori': kategori,
-      'tarih': tarih,
-      'harcama_tutari': miktar,
-    };
   }
 }
