@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// import 'package:image_picker/image_picker.dart'; // 🔴 Haftaya eklenecek paket
-// import 'package:firebase_storage/firebase_storage.dart'; // 🔴 Haftaya eklenecek paket
-import 'dart:io'; // Dosya işlemleri için
+import 'package:image_picker/image_picker.dart'; 
+import 'dart:io';
 import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 
 class ProfilScreen extends StatefulWidget {
   final String userEmail;
@@ -16,13 +16,16 @@ class ProfilScreen extends StatefulWidget {
 
 class _ProfilScreenState extends State<ProfilScreen> {
   final AuthService _authService = AuthService();
+  final StorageService _storageService = StorageService();
+  final ImagePicker _picker = ImagePicker();
+  
   final TextEditingController _incomeController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
   
   String selectedIncomeGroup = "Orta Gelir";
   bool isLoading = true;
-  String? _profileImageUrl; // ✅ Fotoğraf URL'sini tutacak
-  File? _pickedImage;      // ✅ Yeni seçilen fotoğraf dosyası
+  String? _profileImageUrl; 
+  File? _pickedImage;      
 
   @override
   void initState() {
@@ -30,29 +33,48 @@ class _ProfilScreenState extends State<ProfilScreen> {
     _loadProfileData();
   }
 
+  // Sayfanın takılı kalmasını engelleyen güvenli veri yükleme metodu
   Future<void> _loadProfileData() async {
-    final userData = await _authService.getUserData();
-    if (userData != null && userData.exists) {
+    try {
+      final userData = await _authService.getUserData();
+      
       if (mounted) {
         setState(() {
-          _nameController.text = userData['name'] ?? "";
-          _incomeController.text = userData['monthly_income']?.toString() ?? "0";
-          selectedIncomeGroup = userData['income_group'] ?? "Orta Gelir";
-          _profileImageUrl = userData['profile_image_url']; // ✅ URL'yi Firestore'dan oku
-          isLoading = false;
+          if (userData != null && userData.exists) {
+            _nameController.text = userData['name'] ?? "";
+            _incomeController.text = userData['monthly_income']?.toString() ?? "0";
+            selectedIncomeGroup = userData['income_group'] ?? "Orta Gelir";
+            _profileImageUrl = userData['profileImageUrl'];
+          }
+          // Veri olsa da olmasa da yükleme bitti, ekranı aç:
+          isLoading = false; 
         });
+      }
+    } catch (e) {
+      debugPrint("Veri yükleme hatası: $e");
+      if (mounted) {
+        setState(() => isLoading = false);
       }
     }
   }
 
-  // ✅ 🔴 HAFTAYA YAPILACAK: Fotoğraf Seçme Fonksiyonu
   Future<void> _pickImage() async {
-    // Şimdilik boş bırakıyoruz, paketleri kurunca dolduracağız.
-    // print("Fotoğraf seçme tetiklendi");
-    _showErrorSnackBar("Fotoğraf seçme paketi haftaya kurulacak.");
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 50,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _pickedImage = File(image.path);
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar("Fotoğraf seçilirken hata oluştu: $e");
+    }
   }
 
-  // ✅ Verileri ve Fotoğraf URL'sini Güncelliyoruz
   Future<void> _updateProfile() async {
     final user = FirebaseAuth.instance.currentUser; 
     
@@ -60,27 +82,38 @@ class _ProfilScreenState extends State<ProfilScreen> {
       try {
         setState(() => isLoading = true);
         
-        // 🔴 HAFTAYA YAPILACAK: Eğer yeni fotoğraf seçildiyse Firebase Storage'a yükle
-        // String? newImageUrl = _profileImageUrl;
-        // if (_pickedImage != null) {
-        //   newImageUrl = await _uploadImageToStorage(user.uid);
-        // }
+        String? newImageUrl = _profileImageUrl;
 
+        // Yeni fotoğraf seçildiyse Firebase Storage'a gönder
+        if (_pickedImage != null) {
+          newImageUrl = await _storageService.uploadProfilePhoto(_pickedImage!);
+        }
+
+        // Firestore'u güncelle
         await FirebaseFirestore.instance.collection("users").doc(user.uid).update({
           "name": _nameController.text.trim(),
           "monthly_income": double.tryParse(_incomeController.text) ?? 0.0,
           "income_group": selectedIncomeGroup,
-          // "profile_image_url": newImageUrl, // 🔴 Haftaya açılacak
+          "profileImageUrl": newImageUrl, 
         });
 
         if (!mounted) return;
+        
+        setState(() {
+          _profileImageUrl = newImageUrl;
+          _pickedImage = null; // Yükleme bittiği için geçici dosyayı temizle
+          isLoading = false;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Profil güncellendi!"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("✅ Profil başarıyla güncellendi!"), backgroundColor: Colors.green),
         );
+        
         Navigator.pop(context);
       } catch (e) {
+        if (!mounted) return;
         setState(() => isLoading = false);
-        _showErrorSnackBar("Hata: $e");
+        _showErrorSnackBar("Güncelleme hatası: $e");
       }
     }
   }
@@ -95,23 +128,29 @@ class _ProfilScreenState extends State<ProfilScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[50],
-      appBar: AppBar(title: const Text("Profil Bilgileri"), backgroundColor: Colors.indigo, foregroundColor: Colors.white),
+      appBar: AppBar(
+        title: const Text("Profil Bilgileri"), 
+        backgroundColor: Colors.indigo, 
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
       body: isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.indigo))
         : SingleChildScrollView(
             padding: const EdgeInsets.all(25),
             child: Column(
               children: [
-                // ✅ FOTOĞRAF ALANI (GELİŞTİRİLDİ)
                 Stack(
                   children: [
                     CircleAvatar(
                       radius: 65,
                       backgroundColor: Colors.indigo.shade100,
-                      backgroundImage: _profileImageUrl != null 
-                          ? NetworkImage(_profileImageUrl!) // İnternetten yükle
-                          : null,
-                      child: _profileImageUrl == null 
+                      backgroundImage: _pickedImage != null
+                          ? FileImage(_pickedImage!) // Yeni seçilen yerel resim
+                          : (_profileImageUrl != null 
+                              ? NetworkImage(_profileImageUrl!) // Kayıtlı URL
+                              : null),
+                      child: (_pickedImage == null && _profileImageUrl == null)
                           ? const Icon(Icons.person, size: 70, color: Colors.white)
                           : null,
                     ),
@@ -119,7 +158,7 @@ class _ProfilScreenState extends State<ProfilScreen> {
                       bottom: 0,
                       right: 0,
                       child: GestureDetector(
-                        onTap: _pickImage, // ✅ Tıklayınca galeri açılacak
+                        onTap: _pickImage,
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: const BoxDecoration(color: Colors.indigo, shape: BoxShape.circle),
@@ -137,8 +176,12 @@ class _ProfilScreenState extends State<ProfilScreen> {
                 _buildTextField("Aylık Gelir (₺)", _incomeController, Icons.account_balance_wallet_outlined, keyboardType: TextInputType.number),
                 const SizedBox(height: 40),
                 ElevatedButton(
-                  onPressed: _updateProfile,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo, minimumSize: const Size(double.infinity, 55), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  onPressed: isLoading ? null : _updateProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.indigo, 
+                    minimumSize: const Size(double.infinity, 55), 
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                   child: const Text("Profilimi Güncelle", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ],
@@ -147,7 +190,6 @@ class _ProfilScreenState extends State<ProfilScreen> {
     );
   }
 
-  // textField ve dropdown yardımcı metotları aynı kalıyor...
   Widget _buildTextField(String label, TextEditingController controller, IconData icon, {TextInputType? keyboardType}) {
     return TextField(
       controller: controller,
@@ -155,7 +197,8 @@ class _ProfilScreenState extends State<ProfilScreen> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: Colors.indigo),
-        filled: true, fillColor: Colors.white,
+        filled: true, 
+        fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
       ),
@@ -168,11 +211,14 @@ class _ProfilScreenState extends State<ProfilScreen> {
       decoration: InputDecoration(
         labelText: "Gelir Grubu", 
         prefixIcon: const Icon(Icons.trending_up, color: Colors.indigo),
-        filled: true, fillColor: Colors.white,
+        filled: true, 
+        fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
       ),
-      items: ["Düşük Gelir", "Orta Gelir", "Yüksek Gelir"].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+      items: ["Düşük Gelir", "Orta Gelir", "Yüksek Gelir"]
+          .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+          .toList(),
       onChanged: (val) => setState(() => selectedIncomeGroup = val!),
     );
   }
