@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class QuizScreen extends StatefulWidget {
-  const QuizScreen({super.key});
+  final String topic; // 🔥 Hangi konunun quizi olduğunu tutacak
+  const QuizScreen({super.key, required this.topic});
 
   @override
   State<QuizScreen> createState() => _QuizScreenState();
@@ -10,117 +13,82 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   int _currentQuestionIndex = 0;
 
-  // Belgendeki Ç3 paketine uygun örnek senaryo soruları
-  final List<Map<String, dynamic>> _questions = [
-    {
-      "question": "Elektronik harcamalarındaki anomaliyi dengelemek için hangisi daha etkili bir stratejidir?",
-      "options": [
-        "Abonelikleri iptal etmek",
-        "İhtiyaç analizi yapıp beklemek",
-        "Kredi kartı limitini artırmak",
-        "Daha pahalı bir model almak"
-      ],
-      "correct": 1,
-    },
-    {
-      "question": "Bir harcamanın 'anomali' olarak saptanması ne anlama gelir?",
-      "style": "Just-in-Time Learning",
-      "options": [
-        "Harcamanın yasadışı olması",
-        "Bütçe limitinin çok aşılması",
-        "Harcama alışkanlığının dışına çıkılması",
-        "Bakiyenin yetersiz kalması"
-      ],
-      "correct": 2,
+  // 🔥 Konulara göre soru havuzu
+  final Map<String, List<Map<String, dynamic>>> _questionPool = {
+    "Dürtüsel Harcama": [
+      {
+        "question": "İndirimde gördüğünüz ama planınızda olmayan bir ürünü almadan önce ne kadar beklemelisiniz?",
+        "options": ["Hemen almalıyım", "24-48 saat beklemeliyim", "Limit bitene kadar", "Başkasına sormalıyım"],
+        "correct": 1,
+      },
+      {
+        "question": "Dürtüsel harcamayı tetikleyen en yaygın duygu hangisidir?",
+        "options": ["Açlık", "Anlık heyecan/stres", "Yorgunluk", "Hepsi"],
+        "correct": 3,
+      }
+    ],
+    "Akıllı Birikim": [
+      {
+        "question": "Birikim yaparken 'Önce Kendine Öde' kuralı neyi ifade eder?",
+        "options": ["Borçları ödemek", "Harcamalardan kalanı saklamak", "Gelir gelir gelmez birikimi ayırmak", "Eğlenmek"],
+        "correct": 2,
+      }
+    ],
+    "Elektronik Bütçe": [
+      {
+        "question": "Elektronik cihaz alırken 'Toplam Sahiplik Maliyeti' neyi kapsar?",
+        "options": ["Sadece satış fiyatı", "Fiyat + Bakım + Enerji giderleri", "Kargo ücreti", "Garanti süresi"],
+        "correct": 1,
+      }
+    ]
+  };
+
+  Future<void> _updateUserXP() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'total_xp': FieldValue.increment(20),
+      });
     }
-  ];
+  }
 
   @override
   Widget build(BuildContext context) {
-    var currentQuestion = _questions[_currentQuestionIndex];
+    // 🔥 Seçilen konunun sorularını al, yoksa boş liste döndür
+    var questions = _questionPool[widget.topic] ?? [];
+    
+    if (questions.isEmpty) return const Scaffold(body: Center(child: Text("Soru bulunamadı")));
+    var currentQuestion = questions[_currentQuestionIndex];
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text("Mikro-Eğitim Quiz", style: TextStyle(color: Colors.black87)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: AppBar(title: Text("${widget.topic} Quizi")),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // İlerleme çubuğu (Oyunlaştırma)
-            LinearProgressIndicator(
-              value: (_currentQuestionIndex + 1) / _questions.length,
-              backgroundColor: Colors.grey.shade200,
-              color: Colors.indigo,
-              minHeight: 8,
-            ),
+            LinearProgressIndicator(value: (_currentQuestionIndex + 1) / questions.length),
             const SizedBox(height: 40),
-            Text(
-              "Soru ${_currentQuestionIndex + 1}/${_questions.length}",
-              style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              currentQuestion["question"],
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, height: 1.4),
-            ),
-            const SizedBox(height: 40),
-            // Seçenekler
-            ...List.generate(
-              currentQuestion["options"].length,
-              (index) => _buildOptionCard(index, currentQuestion["options"][index]),
-            ),
+            Text(currentQuestion["question"], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 30),
+            ...List.generate(currentQuestion["options"].length, (index) => _buildOption(index, currentQuestion["options"][index], questions.length)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildOptionCard(int index, String text) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            if (_currentQuestionIndex < _questions.length - 1) {
-              _currentQuestionIndex++;
-            } else {
-              // Quiz bittiğinde jüriye puan kazandığını göster
-              _showResultDialog();
-            }
-          });
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: Colors.indigo.shade50,
-                child: Text(
-                  String.fromCharCode(65 + index), // A, B, C...
-                  style: const TextStyle(color: Colors.indigo, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 15),
-              Expanded(child: Text(text, style: const TextStyle(fontSize: 16))),
-            ],
-          ),
-        ),
-      ),
+  Widget _buildOption(int index, String text, int totalLength) {
+    return ListTile(
+      title: Text(text),
+      onTap: () {
+        setState(() {
+          if (_currentQuestionIndex < totalLength - 1) {
+            _currentQuestionIndex++;
+          } else {
+            _showResultDialog();
+          }
+        });
+      },
     );
   }
 
@@ -129,16 +97,18 @@ class _QuizScreenState extends State<QuizScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Tebrikler! 🎉"),
-        content: const Text("Bu mikro-eğitimi tamamladın ve finansal okuryazarlık skorunu artırdın."),
+        content: Text("${widget.topic} konusunu başarıyla tamamladın."),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Dialog'u kapat
-              Navigator.pop(context); // Quiz sayfasından çık
+          ElevatedButton(
+            onPressed: () async {
+              await _updateUserXP();
+              if (mounted) {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              }
             },
-            child: const Text("Puanları Topla (+20 XP)"), // Belgendeki puan alanı[cite: 3]
+            child: const Text("Puanları Topla (+20 XP)"),
           )
         ],
       ),

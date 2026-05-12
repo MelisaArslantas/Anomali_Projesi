@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../screens/jitt.dart'; // JiTT (Gelişim Merkezi) sayfasına erişim için eklendi
 
 // 1️⃣ Risk Skoruna göre renk döndüren fonksiyon
 Color getRiskColor(double skor) {
@@ -59,12 +60,35 @@ void showAnimatedAnomalyPopup(BuildContext context, Map<String, dynamic> data) {
               ],
             ),
             actions: [
-              Center(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("KONTROL EDECEĞİM", style: TextStyle(color: Colors.white)),
-                ),
+              Column(
+                children: [
+                  Center(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        minimumSize: const Size(220, 45),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context); // Önce popup'ı kapatıyoruz
+                        // Kullanıcıyı doğrudan Gelişim Merkezi'ne (JiTT sayfasına) yönlendiriyoruz
+                        Navigator.push(
+                          context, 
+                          MaterialPageRoute(builder: (context) => const JittPage())
+                        );
+                      },
+                      child: const Text(
+                        "NEDENİNİ ÖĞREN VE XP KAZAN", 
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("ŞİMDİ DEĞİL", style: TextStyle(color: Colors.grey)),
+                  ),
+                ],
               ),
             ],
           ),
