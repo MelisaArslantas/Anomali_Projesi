@@ -4,3 +4,4 @@ backend/dataset/*.csv
 backend/dataset/*.csv
 .idea/
 __pycache__/
+backend/serviceAccountKey.json
