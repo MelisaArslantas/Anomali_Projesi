@@ -18,12 +18,13 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
   bool yukleniyor = false;
   Map<String, dynamic>? sonuc;
 
-  // Form Kontrolcüleri
   final TextEditingController _amountController = TextEditingController();
 
-  // ✅ GERÇEKÇİ KATEGORİLER (Backend/IP3 Modeli ile tam uyumlu)
+  // ✅ KATEGORİLER: Maaş ve Gelir en başa eklendi (Dashboard ile tam uyum)
   String secilenKategori = "Gıda & Market";
   final List<String> kategoriler = [
+    'Maaş', 
+    'Gelir',
     'Gıda & Market',
     'Kira & Konut',
     'Fatura & Aidat',
@@ -48,17 +49,18 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
     });
 
     try {
-      // 1️⃣ Firestore'dan güncel kullanıcı verilerini çekiyoruz
       final userData = await _authService.getUserData();
       if (userData == null || !userData.exists) throw "Kullanıcı verisi bulunamadı";
 
       double userIncome = (userData['monthly_income'] as num).toDouble();
       String userIncomeGroup = userData['income_group'];
-      String realUid = userData['uid']; // ✅ Gerçek Firebase UID bilgisi
+      String realUid = userData['uid'];
 
-      // 2️⃣ Backend'e gerçek verileri gönderiyoruz
+      // 💡 MANTIK: Eğer seçilen kategori "Maaş" ise anomali analizi yerine doğrudan kaydetme yapılabilir.
+      // Ancak senin backend (FastAPI) tüm işlemleri predictRisk üzerinden kaydediyorsa devam ediyoruz:
+      
       final data = await ApiService().predictRisk(
-        userId: realUid, // ✅ Sabit '1' yerine gerçek UID gönderiliyor
+        userId: realUid,
         age: 23, 
         income: userIncome, 
         amount: double.tryParse(_amountController.text) ?? 0.0,
@@ -71,10 +73,18 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
         yukleniyor = false;
       });
 
-      // 3️⃣ Anomali varsa JiTT Popup göster
-      if (data["tahmin"] == "Anomali") {
+      // ✅ Maaş/Gelir girişlerinde tebrik mesajı, harcamalarda anomali kontrolü
+      if (secilenKategori == "Maaş" || secilenKategori == "Gelir") {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("💰 Gelir girişi başarıyla kaydedildi! Bütçeniz güncellendi."),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else if (data["tahmin"] == "Anomali") {
         showAnimatedAnomalyPopup(context, data);
       }
+      
     } catch (e) {
       setState(() => yukleniyor = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -106,18 +116,20 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // 🎨 Sonuç Kartı (IP3 Tasarımı)
               if (sonuc != null) AnomaliCard(data: sonuc!),
               
               const SizedBox(height: 10),
               
-              // Tutar Girişi
-              _buildField(_amountController, "Harcama Tutarı (TL)", Icons.monetization_on_outlined),
+              // Tutar Girişi (Maaş ise "Gelir Tutarı" yazması daha şık olur)
+              _buildField(
+                _amountController, 
+                (secilenKategori == "Maaş" || secilenKategori == "Gelir") ? "Gelir Tutarı (TL)" : "Harcama Tutarı (TL)", 
+                Icons.monetization_on_outlined
+              ),
               
               const SizedBox(height: 15),
               
-              // Kategori Seçimi
-              _buildDropdown("Harcama Kategorisi", kategoriler, secilenKategori, 
+              _buildDropdown("İşlem Kategorisi", kategoriler, secilenKategori, 
                 (v) => setState(() => secilenKategori = v!)),
               
               const SizedBox(height: 30),
@@ -126,11 +138,14 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
                 ? const CircularProgressIndicator(color: Colors.indigo)
                 : ElevatedButton.icon(
                     onPressed: analizYap,
-                    icon: const Icon(Icons.analytics_outlined),
-                    label: const Text("ANALİZ ET", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    icon: Icon((secilenKategori == "Maaş" || secilenKategori == "Gelir") ? Icons.save_as : Icons.analytics_outlined),
+                    label: Text(
+                      (secilenKategori == "Maaş" || secilenKategori == "Gelir") ? "GELİRİ KAYDET" : "ANALİZ ET", 
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
+                    ),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(double.infinity, 60),
-                      backgroundColor: Colors.indigo,
+                      backgroundColor: (secilenKategori == "Maaş" || secilenKategori == "Gelir") ? Colors.green[700] : Colors.indigo,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))
                     ),
@@ -142,8 +157,6 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
     );
   }
 
-  // --- YARDIMCI WIDGET'LAR ---
-
   Widget _buildField(TextEditingController ctr, String label, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
@@ -154,9 +167,6 @@ class _AnalizFormScreenState extends State<AnalizFormScreen> {
           labelText: label,
           prefixIcon: Icon(icon, color: Colors.indigo),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
-          focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(15),
-              borderSide: const BorderSide(color: Colors.indigo, width: 2)),
           filled: true,
           fillColor: Colors.grey[50],
         ),
