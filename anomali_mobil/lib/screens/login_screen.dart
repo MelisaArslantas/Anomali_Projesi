@@ -45,10 +45,33 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       );
     } else {
-      // ❌ Hata varsa kullanıcıya göster (Örn: Şifre hatalı)
+      // ❌ İngilizce Firebase hatalarını jüri dostu Türkçe mesajlara çeviriyoruz
       if (!mounted) return;
+      
+      String turkceHataMesaji = "Giriş başarısız. Lütfen bilgilerinizi kontrol edin.";
+      String rawError = result.toString().toLowerCase();
+
+      if (rawError.contains("invalid-credential") || 
+          rawError.contains("incorrect") || 
+          rawError.contains("wrong-password")) {
+        turkceHataMesaji = "E-posta adresi veya şifre hatalı!";
+      } else if (rawError.contains("invalid-email")) {
+        turkceHataMesaji = "Geçersiz bir e-posta formatı girdiniz!";
+      } else if (rawError.contains("user-not-found")) {
+        turkceHataMesaji = "Bu e-posta adresine kayıtlı kullanıcı bulunamadı!";
+      } else if (rawError.contains("network-request-failed")) {
+        turkceHataMesaji = "İnternet bağlantınızı kontrol edin!";
+      } else if (rawError.contains("too-many-requests")) {
+        turkceHataMesaji = "Çok fazla hatalı deneme yaptınız. Lütfen sonra tekrar deneyin.";
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata: $result")),
+        SnackBar(
+          content: Text(turkceHataMesaji),
+          backgroundColor: Colors.redAccent, // Hata hissini vermek için kırmızı şerit
+          behavior: SnackBarBehavior.floating, // Havada duran modern görünüm
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
       );
     }
   }
@@ -70,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 20),
               const Text(
-                "Anomali Tespit",
+                "Mizan",
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,

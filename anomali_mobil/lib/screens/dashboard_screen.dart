@@ -101,7 +101,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text("Dashboard", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text("Mizan", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.indigo,
         elevation: 0,
         actions: [
@@ -189,6 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // 📈 YENİLENEN DİNAMİK BÜTÇE KULLANIM GAUGE GRAFİĞİ (180°)
   Widget _buildBudgetGauge() {
     double activeBudget = _totalMonthlyIncome > 0 ? _totalMonthlyIncome : _profileBudget;
     if (activeBudget <= 0) activeBudget = 1.0; 
@@ -196,18 +197,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double expenseRatio = _totalExpense / activeBudget;
     if (expenseRatio > 1.0) expenseRatio = 1.0;
 
+    // Yarım daire (180 derece) görünümünü PieChart üzerinde matematiksel simüle ediyoruz
+    double expenseValue = expenseRatio * 50; 
+    double remainingValue = (1.0 - expenseRatio) * 50;
+    double hiddenBottomValue = 50; // Gizli alt taban (%50 oranında alt yarım)
+
     return Stack(
       alignment: Alignment.center,
       children: [
         PieChart(
           PieChartData(
-            startDegreeOffset: 180,
+            startDegreeOffset: 180, 
             sectionsSpace: 0,
             centerSpaceRadius: 60,
             sections: [
-              PieChartSectionData(value: _totalExpense, color: expenseRatio > 0.8 ? Colors.redAccent : Colors.indigo, radius: 20, showTitle: false),
-              PieChartSectionData(value: (activeBudget - _totalExpense).clamp(0, activeBudget), color: Colors.grey.shade200, radius: 20, showTitle: false),
-              PieChartSectionData(value: activeBudget, color: Colors.transparent, radius: 20, showTitle: false),
+              // 🔴 Harcanan Kısım
+              PieChartSectionData(
+                value: expenseValue, 
+                color: expenseRatio > 0.8 ? Colors.redAccent : Colors.indigo, 
+                radius: 20, 
+                showTitle: false
+              ),
+              // ⚪ Kalan Limit Kısmı
+              PieChartSectionData(
+                value: remainingValue, 
+                color: Colors.grey.shade200, 
+                radius: 20, 
+                showTitle: false
+              ),
+              // 👁️ Görünmez Alt Pasta Parçası (Gauge İllüzyonu İçin)
+              PieChartSectionData(
+                value: hiddenBottomValue, 
+                color: Colors.transparent, 
+                radius: 20, 
+                showTitle: false
+              ),
             ],
           ),
         ),
@@ -215,22 +239,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text("₺${_totalExpense.toInt()}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
             Text(
-              _totalMonthlyIncome > 0 ? "Bütçe Kullanımı" : "Beklenen Maaş Oranı", 
+              "Toplam Harcama", 
               style: TextStyle(fontSize: 10, color: Colors.grey.shade500)
             ),
+            Text(
+              "Kalan: ₺${(activeBudget - _totalExpense).toInt()}",
+              style: TextStyle(
+                fontSize: 11, 
+                color: expenseRatio > 0.8 ? Colors.red : Colors.green, 
+                fontWeight: FontWeight.bold
+              )
+            ),
             if (_totalMonthlyIncome <= 0)
-              const Text("(Maaş Bekleniyor)", style: TextStyle(fontSize: 8, color: Colors.orange, fontWeight: FontWeight.bold)),
+              const Padding(
+                padding: EdgeInsets.only(top: 2.0),
+                child: Text("(Profil Bütçesi)", style: TextStyle(fontSize: 8, color: Colors.orange, fontWeight: FontWeight.bold)),
+              ),
           ],
         )
       ],
     );
   }
 
-  Widget _buildHeader() { return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Hoşgeldin Melisa,", style: TextStyle(fontSize: 16, color: Colors.grey[600])), Text(userName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.indigo))]); }
+  Widget _buildHeader() { 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start, 
+      children: [
+        Text(
+          "Hoş geldiniz,", 
+          style: TextStyle(fontSize: 16, color: Colors.grey[600])
+        ), 
+        Text(
+          userName, 
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.indigo)
+        )
+      ]
+    ); 
+  }
+
   Widget _buildPageIndicator() { return Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(2, (index) => Container(margin: const EdgeInsets.symmetric(horizontal: 4), width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: _currentChartIndex == index ? Colors.indigo : Colors.grey.shade300)))); }
   Widget _buildChartContainer(String title, Widget chart) { return Card(elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: Colors.grey.shade200)), child: Padding(padding: const EdgeInsets.all(16.0), child: Column(children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)), const Icon(Icons.swap_horiz, size: 18, color: Colors.grey)]), const SizedBox(height: 20), Expanded(child: chart)]))); }
-  Widget _buildSummaryGrid() { return GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12, childAspectRatio: 1.6, children: [_buildSummaryCard("Bütçe", "₺$monthlyIncome", Icons.wallet, customEmerald), _buildSummaryCard("İşlem", transactionCount, Icons.receipt_long, Colors.blue), _buildSummaryCard("Risk Skoru", "%$averageRisk", Icons.security, Colors.orange), _buildSummaryCard("Durum", status, Icons.info_outline, Colors.teal)]); }
+  Widget _buildSummaryGrid() { 
+    // 🔥 ÇÖZÜM: Değişkeni GridView listesinin içinde değil, fonksiyonun tam başında tanımlıyoruz!
+    double activeBudget = _totalMonthlyIncome > 0 ? _totalMonthlyIncome : _profileBudget;
+    double kalanNetPara = activeBudget - _totalExpense;
+
+    return GridView.count(
+      shrinkWrap: true, 
+      physics: const NeverScrollableScrollPhysics(), 
+      crossAxisCount: 2, 
+      crossAxisSpacing: 12, 
+      mainAxisSpacing: 12, 
+      childAspectRatio: 1.6, 
+      children: [
+        // Burası harcama yaptıkça tıkır tıkır düşen Kalan Bütçeyi yukarıya yansıtacak
+        _buildSummaryCard("Kalan Bütçe", "₺${kalanNetPara.toInt()}", Icons.wallet, customEmerald), 
+        _buildSummaryCard("İşlem", transactionCount, Icons.receipt_long, Colors.blue), 
+        _buildSummaryCard("Risk Skoru", "%$averageRisk", Icons.security, Colors.orange), 
+        _buildSummaryCard("Durum", status, Icons.info_outline, Colors.teal)
+      ],
+    ); 
+  }
   Widget _buildQuickActionButton(BuildContext context, String title, IconData icon, Color color, Widget target) { return InkWell(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => target)).then((_) => _fetchDashboardData()), child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: color.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))]), child: Column(children: [Icon(icon, color: Colors.white), const SizedBox(height: 8), Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))]))); }
   Widget _buildJittQuickButton(BuildContext context) { return InkWell(onTap: () { setState(() => hasNotification = false); Navigator.push(context, MaterialPageRoute(builder: (context) => const JittPage())); }, child: Stack(clipBehavior: Clip.none, children: [Container(width: double.infinity, padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.purple.shade700, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.purple.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))]), child: const Column(children: [Icon(Icons.auto_awesome, color: Colors.white), const SizedBox(height: 8), Text("Gelişim", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))])), if (hasNotification) Positioned(right: -2, top: -2, child: Container(padding: const EdgeInsets.all(6), decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: const Text("1", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))))])); }
   Widget _buildSummaryCard(String title, String value, IconData icon, Color color) { return Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade100)), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, color: color, size: 20), const SizedBox(height: 4), Text(title, style: TextStyle(color: Colors.grey[500], fontSize: 10)), Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))])); }

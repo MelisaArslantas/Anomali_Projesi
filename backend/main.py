@@ -74,7 +74,34 @@ def save_to_csv(row_data: dict):
 def home():
     return {"status": "active", "project": "Mizan Financial AI", "model_ready": model is not None}
 
-# 🆕 GÜNCELLENEN DASHBOARD İSTATİSTİKLERİ
+# 🛠️ KULLANICI KAYIT ENDPOINT'İ
+@app.post("/register")
+async def register_user(data: dict = Body(...)):
+    if not db:
+        raise HTTPException(status_code=500, detail="Firebase bağlantısı sağlanamadı.")
+    
+    u_id = data.get("uid") or data.get("userId") or data.get("kullanici_id")
+    email = data.get("email")
+    name = data.get("name") or "Yeni Kullanıcı"
+    monthly_income = float(data.get("monthly_income") or data.get("income") or data.get("budget") or 0.0)
+
+    if not u_id or not email:
+        raise HTTPException(status_code=400, detail="Eksik kayıt bilgileri (uid veya email bulunamadı).")
+
+    try:
+        user_data = {
+            "uid": u_id,
+            "email": email,
+            "name": name,
+            "monthly_income": monthly_income,
+            "created_at": datetime.now().strftime("%d.%m.%Y %H:%M")
+        }
+        db.collection("users").document(u_id).set(user_data)
+        return {"status": "success", "message": "Kullanıcı başarıyla backend veritabanına kaydedildi.", "user": user_data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Firestore kayıt hatası: {str(e)}")
+
+# 📊 DASHBOARD İSTATİSTİKLERİ
 @app.get("/stats/{u_id}")
 async def get_stats(u_id: str):
     if not db:
@@ -111,10 +138,13 @@ async def get_stats(u_id: str):
         if avg_risk >= 60: status_text = "Kritik"
         elif avg_risk >= 35: status_text = "Dikkat"
         
+        # Olası tüm bütçe parametrelerini tarayarak mobil-backend senkronizasyonunu güvenceye alıyoruz
+        budget_value = user_data.get("monthly_income") or user_data.get("income") or user_data.get("budget") or 0.0
+        
         return {
             "name": user_data.get("name", "Kullanıcı"),
-            "income": user_data.get("monthly_income", 0),
-            "real_income": gelir_toplami, # O ay girilen toplam maaş
+            "income": budget_value,
+            "real_income": gelir_toplami, 
             "total_expense": gider_toplami,
             "count": islem_sayisi,
             "avg_risk": avg_risk,
@@ -123,6 +153,7 @@ async def get_stats(u_id: str):
     except Exception as e:
         return {"error": str(e)}
 
+# 🚀 YAPAY ZEKA TAHMİNLEME MOTORU
 @app.post("/predict")
 async def predict(data: dict = Body(...)):
     if model is None:
@@ -131,11 +162,19 @@ async def predict(data: dict = Body(...)):
     try:
         tutar = float(data.get("amount") or data.get("harcama_tutari") or 0.0)
         kategori = str(data.get("category") or data.get("kategori") or "Diğer").strip()
-        u_id = str(data.get("userId") or data.get("kullanici_id") or "1")
+        u_id = str(data.get("uid") or data.get("userId") or data.get("kullanici_id") or "1")
         
         now = datetime.now()
         
-        # 🛡️ MAAŞ/GELİR KORUMASI: Modelin yanılmasını engelle
+        # Kullanıcının profil bütçesini çek
+        aylik_gelir = 30000.0
+        if db and u_id != "1":
+            user_doc = db.collection("users").document(u_id).get()
+            if user_doc.exists:
+                u_data = user_doc.to_dict()
+                aylik_gelir = float(u_data.get("monthly_income") or u_data.get("income") or u_data.get("budget") or 30000.0)
+
+        # 🛡️ MAAŞ / GELİR GİRİŞ KORUMASI
         if kategori in ["Maaş", "Gelir"]:
             is_anomaly = False
             risk_score = 0.0
@@ -144,7 +183,7 @@ async def predict(data: dict = Body(...)):
             analiz_notu = "Gelir girişi tespit edildi. Bütçenize olumlu yansıdı."
             aciklama = "Maaş/Gelir girişi."
         else:
-            # Model Giriş Hazırlığı
+            # Model Giriş Matrisi Hazırlığı
             input_row = {col: 0.0 for col in feature_columns}
             input_row['Amount'] = tutar
             input_row['Hour'] = float(now.hour)
@@ -157,16 +196,20 @@ async def predict(data: dict = Body(...)):
             
             input_df = pd.DataFrame([input_row])[feature_columns]
             
-            # Tahmin
             prediction = model.predict(input_df)[0]
             decision_val = model.decision_function(input_df)[0]
             
-            risk_score = round(float(np.clip((0.5 - decision_val) * 100, 0, 100)), 1)
-            is_anomaly = (prediction == -1)
+            # Dinamik Finansal Risk Skoru Formülü
+            harcama_orani = tutar / aylik_gelir if aylik_gelir > 0 else 0.1
+            base_score = (0.5 - decision_val) * 60
+            ratio_weight = harcama_orani * 120
+            
+            risk_score = round(float(np.clip(base_score + ratio_weight, 5.0, 98.5)), 1)
+            
+            is_anomaly = (prediction == -1) or (risk_score >= 50.0)
             risk_level = get_risk_level(risk_score)
             tahmin_label = "Anomali" if is_anomaly else "Normal"
             
-            # Tavsiye Motoru
             tavsiyeler = {
                 "Gıda & Market": "Market harcamaların limitini aştı. Liste yaparak alışverişe çıkmayı dene!",
                 "Dışarıda Yemek": "Dışarıda yemek masrafın yükseldi. Bu hafta evde yemek hazırlamaya ne dersin?",
@@ -187,13 +230,14 @@ async def predict(data: dict = Body(...)):
             "risk_seviyesi": risk_level,
             "risk_skoru": risk_score,
             "tahmin": tahmin_label,
+            "status": tahmin_label, # Arayüz 'status' beklese dahi çökme yaşanmaması için eşleştirildi
             "aciklama": aciklama,
             "analiz_notu": analiz_notu
         }
         
         save_to_csv(res_data)
 
-        if db:
+        if db and u_id != "1":
             try:
                 db.collection("users").document(u_id).collection("analizler").add(res_data)
             except Exception as fe:
@@ -205,16 +249,33 @@ async def predict(data: dict = Body(...)):
         print(f"🔥 Hata: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+# 📜 İŞLEM GEÇMİŞİ ENDPOINT'İ (INDEX BAĞIMSIZ / ASENKRON SIRALAMALI)
 @app.get("/history/{u_id}")
 async def get_history(u_id: str):
     if db:
         try:
-            docs = db.collection("users").document(u_id).collection("analizler").order_by("tarih", direction=firestore.Query.DESCENDING).stream()
-            return [doc.to_dict() for doc in docs]
+            docs = db.collection("users").document(u_id).collection("analizler").stream()
+            history_list = [doc.to_dict() for doc in docs]
+            
+            # 🔥 ÇÖZÜM: "dd.mm.yyyy HH:MM" formatındaki metni gerçek datetime nesnesine çevirerek sıralıyoruz
+            def parse_tarih(item):
+                tarih_str = item.get("tarih", "")
+                try:
+                    # Metni gerçek tarih-saat nesnesine dönüştür
+                    return datetime.strptime(tarih_str, "%d.%m.%Y %H:%M")
+                except Exception:
+                    # Eğer tarihte bir hata veya boşluk varsa en eski tarihi ata ki en alta düşsün
+                    return datetime.min
+
+            # En yeni işlem en üstte olacak şekilde (reverse=True) sırala
+            history_list.sort(key=parse_tarih, reverse=True)
+            return history_list
+            
         except Exception as e:
-            print(f"⚠️ Firestore Geçmiş Hatası: {e}")
+            print(f"⚠️ Firestore Geçmiş Sıralama Hatası: {e}")
     return []
 
+# 🗑️ İŞLEM SİLME ENDPOINT'İ
 @app.delete("/delete-transaction/{u_id}/{tarih}")
 async def delete_transaction(u_id: str, tarih: str):
     try:
